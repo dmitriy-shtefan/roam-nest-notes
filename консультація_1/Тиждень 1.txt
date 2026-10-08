@@ -1,0 +1,905 @@
+5 основних таблиць БД:
+
+Таблиця	        Для чого
+User	        стандартна таблиця Django для користувачів
+Profile	        роль користувача, телефон, аватар та інші дані профілю
+Property	    об'єкти нерухомості
+Rooms           об'єкти які можна бронювати
+PropertyImage	фотографії об'єктів
+Amenity	        зручності (Wi-Fi, басейн, парковка тощо)
+Booking	        бронювання
+
+
+1. User
+Це готова таблиця Django, її ми самі повністю не створюємо.
+Вона відповідає за обліковий запис користувача.
+
+
+2. Profile
+Таблиця пов'язана з User через OneToOne.
+id
+user_id
+role
+phone
+avatar
+created_at
+updated_at
+
+role:
+USER
+OWNER
+ADMIN
+
+Guest окремої таблиці не має, бо це просто неавторизований відвідувач.
+
+
+3. Property
+owner_id → User.id.
+
+Основна таблиця житла:
+id
+owner_id
+title
+description
+property_type
+address
+city
+country
+status   (new, published, inactive)
+created_at
+updated_at
+
+
+3.1. Rooms
+
+Таблиця для обʼєктів які можна забронювати
+id
+property_id
+title
+description
+room_type
+price_per_night
+max_guests
+bedrooms
+beds
+bathrooms
+rooms_count
+is_published
+created_at
+updated_at
+
+
+4. PropertyImage
+property_id → Property.id.
+Одне житло може мати багато фотографій.
+
+Фотографії конкретного житла:
+id
+property_id
+room_id             якщо NULL - тоді це фото самого property
+image_url
+is_main
+created_at
+
+
+5. Amenity
+Довідник зручностей:
+id
+name     Кондиціонер
+
+
+З Property буде зв'язок Many-to-Many:
+id
+property_id
+amenity_id
+
+З Room буде зв'язок Many-to-Many:
+id
+room_id
+amenity_id
+
+
+
+6. Booking
+Таблиця бронювань:
+id
+user_id
+room_id
+check_in
+check_out
+guests
+contact_name
+contact_phone
+contact_email
+special_requests
+price_per_night
+total_price
+status
+created_at
+updated_at
+
+Зв'язки:
+user_id → User
+room_id → Room
+
+
+
+
+===================================================================================
+Основними сутностями є User, Profile, Property, Room, PropertyImage, Amenity, Booking.
+
+1. Загальна схема:
+
+користувач може мати один профіль
+Django User -> 1:1 -> Profile
+
+власник — багато об'єктів нерухомості:
+User -> 1:N -> Property -> 1:N PropertyImage
+			-> N:N Amenity 
+
+бронювання пов'язує користувача з конкретним житлом
+User -> 1:N Booking -> N:1 -> Property  
+
+
+2. User
+User ми не створюємо власною моделлю.
+User має стандартний Django User, а роль знаходиться в Profile.
+Він уже має:
+Поле          | Тип      | Призначення 
+`id`          | Integer  | Унікальний ідентифікатор користувача 
+`username`    | String   | Ім'я користувача для ідентифікації 
+`password`    | String   | Хешований пароль користувача 
+`first_name`  | String   | Ім'я користувача 
+`last_name`   | String   | Прізвище користувача 
+`email`       | String   | Електронна адреса користувача 
+`is_active`   | Boolean  | Визначає, чи активний обліковий запис 
+`date_joined` | DateTime | Дата та час реєстрації 
+
+Також Django User має інші стандартні поля та механізми авторизації.
+
+
+3. Profile
+Окрема модель яка розширює інформацію про користувача.
+Поля:
+| Поле         | Тип          | Призначення 
+| `id`         | Integer      | ID профілю 
+| `user`       | OneToOne→User| користувач 
+| `role`       | Char         | роль 
+| `phone`      | Char         | телефон 
+| `avatar`     | URL          | аватар 
+| `created_at` | DateTime     | дата створення 
+| `updated_at` | DateTime     | дата оновлення 
+
+Ролі: USER, OWNER, ADMIN
+Guest — неавторизований відвідувач, який не має запису User/Profile. 
+Після реєстрації створюється User та Profile з роллю USER.
+Profile(role=OWNER) — це звичайний зареєстрований користувач, якому надано роль власника;
+ADMIN — адміністратор.
+
+4. Property
+Основна модель житла:
+ Поле 		 | Тип     | Призначення 
+`id` 		 | Integer | Унікальний ідентифікатор об'єкта 
+`owner` 	 | ForeignKey → User | Власник об'єкта 
+`title` 	 | String  | Назва житла 
+`description` 	 | Text    | Детальний опис житла 
+`property_type`  | Choice  | Тип житла 
+`address` 	 | String  | Адреса об'єкта 
+`city`           | String  | Місто розташування 
+`country`        | String  | Країна розташування 
+`price_per_night`| Decimal | Ціна проживання за одну ніч 
+`max_guests`     | Integer | Максимальна кількість гостей 
+`bedrooms`       | Integer | Кількість спалень 
+`beds`           | Integer | Кількість ліжок 
+`bathrooms`      | Integer | Кількість санвузлів 
+`amenities`      | ManyToMany → Amenity | зручності житла
+`is_available`   | Boolean | *
+`is_published`   | Boolean | Визначає, чи опублікований об'єкт для користувачів 
+`created_at`     | DateTime| Дата та час створення об'єкта 
+`updated_at`     | DateTime| Дата та час останнього оновлення 
+
+*is_available визначає, чи дозволено бронювати об'єкт загалом. 
+Фактична доступність житла на конкретні дати визначається з 
+урахуванням існуючих бронювань
+
+property_type : APARTMENT, HOUSE, HOTEL, HOSTEL, VILLA
+
+
+Зв'язки: Property.owner → User
+User 1 → N Property
+(власник може мати багато об'єктів)
+
+5. PropertyImage
+Фото окремо від Property:
+Поле        | Тип         | Призначення 
+`id` 	    | Integer     | Унікальний ідентифікатор фотографії 
+`property`  | ForeignKey → Property | Об'єкт, до якого належить фотографія 
+`image`     | URL / String | Посилання на фотографію 
+`is_main`   | Boolean      | Визначає, чи є фотографія основною 
+`created_at`| DateTime     | Дата та час додавання фотографії 
+
+Зв'язок: Property 1 -> N PropertyImage
+Тобто одне житло може мати багато фотографій.
+
+
+6. Amenity
+Зручності:
+Поле   | Тип      | Призначення 
+`id`   | Integer  | Унікальний ідентифікатор зручності 
+`name` | String   | Назва зручності 
+
+Наприклад: Wi-Fi,Паркінг,Кондиціонер,Басейн,Кухня,Пральна машина
+
+Зв'язок:Property N -> M Amenity
+Тобто одне житло має багато зручностей, і одна зручність може бути у багатьох житлах.
+
+
+7. Booking
+Бронювання:
+Поле              | Тип      | Призначення 
+`id`              | Integer / AutoField | Унікальний ідентифікатор бронювання 
+`user`            | ForeignKey → User | Користувач, який здійснив бронювання 
+`property`        | ForeignKey → Property | Заброньований об'єкт 
+`check_in`        | Date     | Дата заїзду 
+`check_out`       | Date     | Дата виїзду 
+`guests`          | Integer  | Кількість гостей 
+`contact_name`    | String   | Ім'я контактної особи 
+`contact_phone`   | String   | Контактний номер телефону 
+`contact_email`   | String   | Контактна електронна адреса 
+`special_requests`| Text     | Особливі побажання користувача 
+`price_per_night` | Decimal  | Ціна за ніч на момент бронювання 
+`total_price`     | Decimal  | Загальна вартість бронювання 
+`status`          | String / Choice | Поточний статус бронювання 
+`created_at`      | DateTime | Дата та час створення бронювання 
+`updated_at`      | DateTime | Дата та час останнього оновлення бронювання 
+
+У ТЗ для бронювання передбачені дати заїзду/виїзду, кількість гостей, 
+контактні дані, побажання, ціна за ніч та загальна вартість.
+При створенні бронювання система перевіряє, чи не перетинаються вибрані 
+дати з іншим активним бронюванням цього об'єкта. 
+Якщо перетин існує, бронювання не створюється.
+
+Зв'язки: 
+User 1 -> N Booking
+Property 1 -> N Booking
+Одному користувачу може належати багато бронювань.
+Одне житло може мати багато бронювань у різні дати.
+
+Status: PENDING, CONFIRMED, CANCELLED, COMPLETED
+
+
+
+===========================================================================
+2. Схема API endpoint'ів 
+
+2.1. Авторизація та користувач
+
+
+= POST /api/auth/register/
+Призначення: реєстрація нового користувача.
+Параметри запиту:
+{
+  "username": "olena",
+  "email": "olena@gmail.com",
+  "password": "Password123!",
+  "first_name": "Олена",
+  "last_name": "Бенедюк"
+}
+Повертає:
+{
+  "id": 1,
+  "username": "olena",
+  "email": "olena@gmail.com",
+  "first_name": "Олена",
+  "last_name": "Бенедюк",
+  "role": "USER"
+}
+
+
+ = POST /api/auth/login/
+Призначення: авторизація користувача.
+Параметри:
+{
+  "email": "olena@gmail.com",
+  "password": "Password123!"
+}
+
+Повертає:
+{
+  "access": "JWT_ACCESS_TOKEN",
+  "refresh": "JWT_REFRESH_TOKEN",
+  "user": {
+    "id": 1,
+    "username": "olena",
+    "role": "USER"
+  }
+}
+
+
+= POST /api/auth/refresh/
+Призначення: отримання нового access token за refresh token.
+Запит:
+{
+  "refresh": "JWT_REFRESH_TOKEN"
+}
+Відповідь:
+{
+  "access": "NEW_JWT_ACCESS_TOKEN"
+}
+
+
+= POST /api/auth/logout/
+Призначення: вихід із системи.
+Для виходу користувач надсилає авторизований запит із JWT. 
+На клієнтській стороні токени видаляються. 
+Механізм відкликання refresh token реалізується окремо за потреби.
+Повертає:
+{
+  "message": "Successfully logged out"
+}
+
+
+= GET /api/auth/me/
+Призначення: отримання інформації про поточного авторизованого користувача.
+Параметри: JWT token у заголовку.
+Повертає:
+{
+  "id": 1,
+  "username": "olena",
+  "email": "olena@gmail.com",
+  "first_name": "Олена",
+  "last_name": "Бенедюк",
+  "role": "USER"
+}
+
+
+
+2.2. Пошук та отримання житла
+У ТЗ передбачений пошук за містом/країною, датами заїзду та виїзду, кількістю гостей, а також фільтрація за ціною, типом житла, максимальною кількістю гостей і зручностями та сортування за ціною. 
+
+
+= GET /api/properties/
+Призначення: отримання списку доступних об'єктів житла.
+Наприклад, frontend викликає:
+GET /api/properties/?city=Kyiv&guests=2
+
+Параметри:
+Параметр	Тип	Обов'язковий	Призначення
+city      	String	Ні	місто
+country	        String	Ні	країна
+check_in	Date	Ні	дата заїзду
+check_out	Date	Ні	дата виїзду
+guests	        Integer	Ні	кількість гостей
+min_price	Decimal	Ні	мінімальна ціна
+max_price	Decimal	Ні	максимальна ціна
+property_type	String	Ні	тип житла
+max_guests	Integer	Ні	максимальна місткість
+amenities	Array	Ні	необхідні зручності
+ordering	String	Ні	сортування
+
+
+Наприклад:
+GET /api/properties/?city=Kyiv&check_in=2026-10-15&check_out=2026-10-18&guests=2&max_price=3000&ordering=price
+
+Повертає:
+список знайдених доступних об'єктів:
+[
+  {
+    "id": 1,
+    "title": "Apartment in Kyiv",
+    "city": "Kyiv",
+    "country": "Ukraine",
+    "property_type": "Apartment",
+    "price_per_night": 1800,
+    "max_guests": 4,
+    "main_image": "image_url",
+  },
+  {
+    "id": 2,
+    "title": "Cozy House",
+    "city": "Kyiv",
+    "country": "Ukraine",
+    "property_type": "House",
+    "price_per_night": 2500,
+    "max_guests": 6,
+    "main_image": "image_url"
+  }
+]
+
+Тобто фактично:
+Викликаємо → отримуємо список доступного житла.
+
+
+= GET /api/properties/{id}/
+Призначення: отримання детальної інформації про конкретне житло.
+Наприклад:
+GET /api/properties/15/
+
+Параметр:
+id = 15
+
+Повертає:
+{
+  "id": 15,
+  "title": "Cozy Apartment",
+  "description": "Apartment near city center",
+  "property_type": "Apartment",
+  "address": "Khreshchatyk 10",
+  "city": "Kyiv",
+  "country": "Ukraine",
+  "price_per_night": 1800,
+  "max_guests": 4,
+  "bedrooms": 2,
+  "beds": 2,
+  "bathrooms": 1,
+  "amenities": [
+    "Wi-Fi",
+    "Kitchen",
+    "Air conditioning"
+  ],
+  "images": [
+    "image1.jpg",
+    "image2.jpg"
+  ],
+  "is_available": true
+}
+Тобто при відкритті картки житла frontend отримує всю інформацію про конкретний об'єкт, включно з фото та зручностями.
+
+
+ = GET /api/amenities/
+Призначення: отримання списку доступних зручностей для фільтрації.
+Параметри: немає.
+Повертає:
+[
+  {
+    "id": 1,
+    "name": "Wi-Fi"
+  },
+  {
+    "id": 2,
+    "name": "Parking"
+  },
+  {
+    "id": 3,
+    "name": "Swimming pool"
+  }
+]
+
+
+
+2.3. Профіль користувача
+
+
+ = GET /api/profile/
+Призначення: отримання профілю поточного користувача.
+Параметри: JWT.
+Повертає:
+{
+  "id": 1,
+  "username": "olena",
+  "email": "olena@gmail.com",
+  "first_name": "Олена",
+  "last_name": "Бенедюк",
+  "phone": "+380...",
+  "avatar": "avatar_url",
+  "role": "USER"
+}
+
+
+ = PATCH /api/profile/
+Призначення: редагування профілю.
+Параметри:
+{
+  "first_name": "Олена",
+  "last_name": "Бенедюк",
+  "phone": "+380...",
+  "avatar": "avatar_url"
+}
+Повертає: оновлений профіль.
+Функціонал особистого кабінету користувача передбачає перегляд та редагування персональних даних.
+
+
+
+2.4. Бронювання
+
+
+ = POST /api/bookings/
+Призначення: створення нового бронювання.
+Параметри:
+{
+  "property": 15,
+  "check_in": "2026-10-15",
+  "check_out": "2026-10-18",
+  "guests": 2,
+  "contact_name": "Олена Бенедюк",
+  "contact_phone": "+380...",
+  "contact_email": "olena@gmail.com",
+  "special_requests": "Пізній заїзд"
+}
+Повертає:
+{
+  "id": 25,
+  "property": 15,
+  "check_in": "2026-10-15",
+  "check_out": "2026-10-18",
+  "guests": 2,
+  "price_per_night": 1800,
+  "nights": 3,
+  "total_price": 5400,
+  "status": "PENDING"
+}
+Перед підтвердженням бронювання користувачу повинні бути показані об'єкт, дати, кількість ночей, кількість гостей, ціна за ніч і загальна вартість. 
+
+
+ = GET /api/bookings/
+Призначення: отримання бронювань поточного користувача.
+Параметри: JWT.
+Повертає:
+[
+  {
+    "id": 25,
+    "property": {
+      "id": 15,
+      "title": "Cozy Apartment"
+    },
+    "check_in": "2026-10-15",
+    "check_out": "2026-10-18",
+    "guests": 2,
+    "total_price": 5400,
+    "status": "CONFIRMED"
+  }
+]
+
+
+ = GET /api/bookings/{id}/
+Призначення: отримання конкретного бронювання.
+Параметр: id
+Повертає: повну інформацію про бронювання.
+
+
+= POST /api/bookings/{id}/cancel/
+Призначення: скасування власного бронювання.
+Параметр: id
+
+Повертає:
+{
+  "id": 25,
+  "status": "CANCELLED"
+}
+
+
+
+2.5. API для Owner
+
+
+ = GET /api/owner/properties/
+Призначення: отримання списку житла поточного власника.
+Параметри: JWT Owner.
+Повертає:
+[
+  {
+    "id": 15,
+    "title": "Cozy Apartment",
+    "city": "Kyiv",
+    "price_per_night": 1800,
+    "is_available": true,
+    "is_published": true
+  }
+]
+
+
+ = POST /api/properties/
+Призначення: створення нового об'єкта житла власником.
+Параметри:
+{
+  "title": "Cozy Apartment",
+  "description": "Nice apartment",
+  "property_type": "Apartment",
+  "address": "Khreshchatyk 10",
+  "city": "Kyiv",
+  "country": "Ukraine",
+  "price_per_night": 1800,
+  "max_guests": 4,
+  "bedrooms": 2,
+  "beds": 2,
+  "bathrooms": 1,
+  "amenities": [1, 2]
+}
+Повертає: створений об'єкт.
+
+
+ = PATCH /api/properties/{id}/
+Призначення: редагування власного об'єкта.
+Параметри: тільки поля, які потрібно змінити.
+Наприклад:
+{
+  "price_per_night": 2000,
+  "max_guests": 5
+}
+Повертає: оновлений об'єкт.
+
+
+ = POST /api/properties/{id}/images/
+Призначення: додавання фотографії.
+
+
+ = DELETE /api/properties/{id}/images/{image_id}/
+Призначення: видалення фотографії.
+
+
+ = DELETE /api/properties/{id}/
+Призначення: видалення власного об'єкта.
+Параметр: id.
+Повертає: оновлений статус об'єкта.
+Об'єкт без та з наявними бронюваннями не видаляється фізично, 
+а приховується шляхом зміни is_published = false.
+
+
+
+Функції власника щодо додавання, редагування та
+ видалення об'єктів, фотографій, зміни ціни, зручностей та доступності
+
+
+ = GET /api/owner/bookings/
+Призначення: перегляд бронювань об'єктів поточного власника.
+Повертає:
+[
+  {
+    "id": 25,
+    "property": "Cozy Apartment",
+    "guest": "Олена",
+    "check_in": "2026-10-15",
+    "check_out": "2026-10-18",
+    "guests": 2,
+    "status": "PENDING"
+  }
+]
+Endpoint повертає тільки бронювання об'єктів, власником яких є поточний користувач.
+booking.property.owner == request.user
+
+
+ = PATCH /api/owner/bookings/{id}/
+Призначення: підтвердження або зміна статусу бронювання власником.
+Параметри:
+{
+  "status": "CONFIRMED"
+}
+Повертає: оновлене бронювання.
+
+
+
+2.6. API адміністратора
+Ці endpoint'и доступні тільки користувачу з роллю ADMIN.
+
+
+ = GET /api/admin/users/
+Призначення: отримання списку користувачів.
+Повертає:
+[
+  {
+    "id": 1,
+    "username": "olena",
+    "email": "olena@gmail.com",
+    "role": "USER",
+    "is_active": true
+  }
+]
+
+
+ = PATCH /api/admin/users/{id}/
+Призначення: блокування/розблокування користувача або зміна його ролі.
+Параметри:
+{
+  "is_active": false,
+  "role": "OWNER"
+}
+
+
+ = GET /api/admin/properties/
+Призначення: перегляд усіх об'єктів житла.
+Повертає: список усіх об'єктів, незалежно від власника та статусу публікації.
+
+
+ = PATCH /api/admin/properties/{id}/
+Призначення: зміна статусу публікації або інше адміністративне редагування.
+Наприклад:
+{
+  "is_published": true
+}
+
+
+ = DELETE /api/admin/properties/{id}/
+Призначення: видалення об'єкта адміністратором.
+
+
+3. Коротка таблиця всіх endpoint'ів
+Метод	Endpoint	            Призначення	             Доступ
+POST	/api/auth/register/	    Реєстрація	             Guest
+POST	/api/auth/login/	    Авторизація   	     Guest
+POST    /api/auth/refresh/          Оновлення access token   USER / OWNER / ADMIN
+POST	/api/auth/logout/	    Вихід	             USER / OWNER / ADMIN
+GET	/api/auth/me/	            Поточний користувач	     USER / OWNER / ADMIN
+GET	/api/properties/	    Пошук та список житла    Guest
+GET	/api/properties/{id}/	    Деталі житла	     Guest
+POST    /api/properties/{id}/images/Додавання фотографії     Owner
+DELETE  /api/properties/{id}/images/{image_id}/Видалення фото   Owner
+GET	/api/amenities/	            Список зручностей	     Guest
+GET	/api/profile/	            Профіль            	     USER / OWNER / ADMIN
+PATCH	/api/profile/    	    Редагування профілю	     USER / OWNER / ADMIN
+POST	/api/bookings/	            Створення бронювання     USER / OWNER
+GET	/api/bookings/	            Мої бронювання	     USER / OWNER
+GET	/api/bookings/{id}/	    Деталі бронювання	     USER / OWNER
+POST	/api/bookings/{id}/cancel/  Скасування	             USER / OWNER
+GET	/api/owner/properties/	    Мої об'єкти	             Owner
+POST	/api/properties/	    Створення об'єкта	     Owner
+PATCH	/api/properties/{id}/	    Редагування об'єкта	     Owner
+DELETE	/api/properties/{id}/	    Видалення об'єкта	     Owner
+GET	/api/owner/bookings/	    Бронювання моїх об'єктів Owner
+PATCH	/api/owner/bookings/{id}/   Зміна статусу	     Owner
+GET	/api/admin/users/	    Список користувачів	     Admin
+PATCH	/api/admin/users/{id}/	    Керування користувачем   Admin
+GET	/api/admin/properties/	    Список об'єктів	     Admin
+PATCH	/api/admin/properties/{id}/ Керування об'єктом	     Admin
+DELETE	/api/admin/properties/{id}/ Видалення об'єкта	     Admin
+
+
+
+
+
+
+=============================================================
+3. Авторизація та перевірка доступу
+
+Автентифікація — система визначає, хто користувач.
+Авторизація — система перевіряє, що цьому користувачу дозволено робити.
+
+У ТЗ передбачені ролі Guest, Registered User, Owner, Admin, 
+а також авторизація та розмежування доступу до функцій системи.
+
+
+3.1. Типи доступу користувачів
+Тип	Що це означає
+Guest	Неавторизований відвідувач, не має запису Profile
+USER	Зареєстрований користувач
+OWNER	Зареєстрований користувач, який може керувати власними об'єктами
+ADMIN	Адміністратор системи
+
+У базі даних як Profile.role зберігаються тільки USER, OWNER, ADMIN. 
+Guest не зберігається як роль, оскільки це неавторизований відвідувач.
+
+
+3.2. Автентифікація
+Для авторизації користувача пропонується використовувати JWT (JSON Web Token).
+
+Реєстрація
+POST /api/auth/register/
+
+Користувач передає:
+{
+    "username": "olena",
+    "email": "olena@gmail.com",
+    "password": "********"
+}
+
+Система:
+1. перевіряє дані;
+2. створює Django User;
+3. створює Profile;
+4. встановлює роль USER.
+
+Вхід
+POST /api/auth/login/
+
+Користувач передає:
+{
+    "email": "olena@gmail.com",
+    "password": "********"
+}
+При успішній авторизації система повертає JWT:
+{
+    "access": "access_token",
+    "refresh": "refresh_token"
+}
+
+access token використовується для доступу до захищених endpoint'ів.
+
+
+3.3. Передача токена
+Для захищених запитів frontend передає токен у HTTP-заголовку:
+Authorization: Bearer <access_token>
+
+Наприклад:
+GET /api/profile/
+Authorization: Bearer eyJ...
+
+Backend перевіряє токен і визначає користувача, від імені якого виконується запит.
+
+
+3.4. Перевірка доступу за ролями
+Після автентифікації backend визначає роль користувача через Profile.role.
+Наприклад:
+User -> Profile -> role = OWNER
+
+На основі ролі визначається доступ до endpoint'ів.
+Матриця доступу
+Функція / Endpoint      	Guest	USER	OWNER	ADMIN
+Перегляд житла	                ✅	✅	✅	✅
+Пошук та фільтрація	        ✅	✅	✅	✅
+Перегляд деталей житла    	✅	✅	✅	✅
+Реєстрація	                ✅	❌	❌	❌
+Авторизація     	        ✅	❌	❌	❌
+Редагування профілю      	❌	✅	✅	✅
+Створення бронювання	        ❌	✅	✅	❌
+Перегляд своїх бронювань	❌	✅	✅	❌
+Скасування свого бронювання	❌	✅	✅	❌
+Створення об'єкта	        ❌	❌	✅	❌
+Редагування свого об'єкта	❌	❌	✅	❌
+Видалення свого об'єкта	        ❌	❌	✅	❌
+Перегляд бронювань
+ своїх об'єктів	                ❌	❌	✅	❌
+Зміна статусу бронювання	❌	❌	✅	❌
+Перегляд усіх користувачів	❌	❌	❌	✅
+Блокування користувачів	        ❌	❌	❌	✅
+Керування ролями	        ❌	❌	❌	✅
+Керування всіма об'єктами	❌	❌	❌	✅
+
+
+3.5. Перевірка власника об'єкта
+Однієї перевірки ролі OWNER недостатньо.
+backend повинен перевірити не тільки:
+role == OWNER
+але й:
+property.owner == request.user
+Це важлива перевірка, щоб один власник не міг редагувати житло іншого власника.
+
+
+3.6. Перевірка бронювання
+Аналогічно користувач може працювати тільки зі своїми бронюваннями.
+Авторизований користувач може переглядати та скасовувати тільки власні бронювання.
+booking.user == request.user
+
+
+3.7. Перевірка адміністратора
+Адміністративні endpoint'и доступні тільки:
+Profile.role == ADMIN
+
+Наприклад:
+GET /api/admin/users/
+
+Для:
+USER → ❌
+OWNER → ❌
+ADMIN → ✅
+
+Тобто недостатньо просто бути авторизованим — потрібна відповідна роль.
+
+
+3.8. Як це працює разом
+Загальна логіка backend:
+HTTP Request ->JWT перевірка -> Хто користувач? ->Profile role:
+->USER ->дозволи
+->OWNER ->дозволи ->Перевірка власності ->API endpoint
+->ADMIN ->дозволи
+
+
+3.9. Що реалізуємо в Django REST Framework
+Після затвердження схеми це буде приблизно розподілено так:
+
+accounts/            → відповідає за користувачів, профілі, ролі та авторизацію
+├── models.py        → моделі бази даних (Profile, Role)
+├── serializers.py   → перетворення даних (реєстрація, профіль)
+├── views.py         → логіка обробки HTTP-запитів (login, register, profile)
+└── permissions.py   → "Чи може цей користувач це зробити?" (User/Owner/Admin) permissions
+
+properties/            → відповідає за житло.
+├── models.py          → Тут описуємо таблиці:Property, PropertyImage,Amenity
+├── serializers.py     → які дані про житло API приймає і повертає.
+├── views.py           → endpoint'и для житла.
+└── permissions.py     → перевірка власника
+
+bookings/              → відповідає за бронювання
+├── models.py          → модель:Booking
+├── serializers.py     → що приймає API при створенні бронювання
+├── views.py           → endpoint'и бронювань
+└── permissions.py     → перевірка користувача/власника
+
